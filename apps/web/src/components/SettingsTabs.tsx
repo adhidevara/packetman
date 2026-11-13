@@ -115,7 +115,9 @@ export function CollectionTab({ collectionId }: { collectionId: string }) {
             </div>
           </div>
         )}
-        {sub === "auth" && <AuthEditor auth={collection.auth} allowInherit={false} onChange={(auth) => updateCollection(collection.id, (c) => ({ ...c, auth }))} />}
+        {sub === "auth" && (
+          <AuthEditor auth={collection.auth} allowInherit={false} collectionId={collection.id} onChange={(auth) => updateCollection(collection.id, (c) => ({ ...c, auth }))} />
+        )}
         {sub === "scripts" && <ScriptsEditor scripts={collection.scripts} onChange={(scripts) => updateCollection(collection.id, (c) => ({ ...c, scripts }))} />}
       </div>
     </div>

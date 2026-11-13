@@ -1,4 +1,5 @@
 import {
+  defaultOAuth2,
   defaultSettings,
   newCollection,
   newEnvironment,
@@ -92,6 +93,27 @@ function authFrom(raw: unknown, warnings: string[], where: string, fallback: Aut
       return { type: "basic", username: p.username ?? "", password: p.password ?? "" };
     case "apikey":
       return { type: "apikey", key: p.key ?? "", value: p.value ?? "", in: p.in === "query" ? "query" : "header" };
+    case "oauth2": {
+      const grant = p.grant_type ?? "authorization_code";
+      const supported = grant === "authorization_code" || grant === "authorization_code_with_pkce" || grant === "client_credentials";
+      if (!supported) {
+        warnings.push(`${where}: OAuth2 grant "${grant}" belum didukung; access token yang ada dipakai sebagai Bearer.`);
+        return p.accessToken ? { type: "bearer", token: p.accessToken } : { type: "none" };
+      }
+      return {
+        ...defaultOAuth2(),
+        grantType: grant === "client_credentials" ? "client_credentials" : "authorization_code",
+        usePkce: grant === "authorization_code_with_pkce",
+        authUrl: p.authUrl ?? "",
+        tokenUrl: p.accessTokenUrl ?? "",
+        clientId: p.clientId ?? "",
+        clientSecret: p.clientSecret ?? "",
+        scope: p.scope ?? "",
+        clientAuth: p.client_authentication === "header" ? "basic" : "body",
+        headerPrefix: p.headerPrefix || "Bearer",
+        accessToken: p.accessToken ?? "",
+      };
+    }
     case "":
       return fallback;
     default:
@@ -267,6 +289,25 @@ function authOut(auth: Auth): Json | undefined {
           { key: "in", value: auth.in, type: "string" },
         ],
       };
+    case "oauth2": {
+      // Access/refresh tokens are local state and are never exported.
+      const grant = auth.grantType === "client_credentials" ? "client_credentials" : auth.usePkce ? "authorization_code_with_pkce" : "authorization_code";
+      const kv = (key: string, value: string) => ({ key, value, type: "string" });
+      return {
+        type: "oauth2",
+        oauth2: [
+          kv("grant_type", grant),
+          kv("authUrl", auth.authUrl),
+          kv("accessTokenUrl", auth.tokenUrl),
+          kv("clientId", auth.clientId),
+          kv("clientSecret", auth.clientSecret),
+          kv("scope", auth.scope),
+          kv("client_authentication", auth.clientAuth === "basic" ? "header" : "body"),
+          kv("headerPrefix", auth.headerPrefix),
+          kv("addTokenTo", "header"),
+        ],
+      };
+    }
   }
 }
 

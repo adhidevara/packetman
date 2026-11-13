@@ -1,7 +1,15 @@
 "use client";
 
 import {
+  buildAuthorizeUrl,
+  buildTokenRequest,
   findNode,
+  generatePkce,
+  parseTokenResponse,
+  randomString,
+  resolveString,
+  type OAuth2Auth,
+  type TokenGrant,
   findRequest,
   importCurl,
   importPostmanCollection,
@@ -39,6 +47,7 @@ import { executeRequest, runCollection, type ExecutionResult, type RunnerItemRes
 import { create } from "zustand";
 import { db, getSetting, setSetting, type HistoryEntry } from "@/lib/db";
 import { CorsOrNetworkError, detectExtension, safeHost, sendDirect, sendViaExtension, sendViaRelay, type ExecutorMode } from "@/lib/executors";
+import { OAUTH_POPUP_FEATURES, oauthRedirectUri, waitForAuthorizationCode } from "@/lib/oauthPopup";
 import { loadQuickJS } from "@/lib/quickjs";
 import { demoCollection, demoEnvironment } from "@/lib/seed";
 
@@ -121,6 +130,8 @@ interface State {
   codePanelOpen: boolean;
   importOpen: boolean;
   saveDialogTabId: string | null;
+  /** Authorize URL to open manually when the browser blocked the OAuth popup. */
+  oauthPendingUrl: string | null;
 }
 
 interface Actions {
@@ -159,6 +170,8 @@ interface Actions {
   setActiveEnv(id: string | null): void;
 
   send(tabId: string): Promise<void>;
+  /** Obtain (or refresh) an OAuth 2.0 token. Must be called from a click handler (opens a popup). */
+  fetchOAuthToken(auth: OAuth2Auth, collectionId: string | null, mode: "new" | "refresh"): Promise<OAuth2Auth>;
   openRunnerTab(collectionId: string, folderId?: string): void;
   startRunner(tabId: string, config: RunnerConfig): Promise<void>;
   stopRunner(tabId: string): void;
@@ -313,6 +326,7 @@ export const useWorkspace = create<Store>()((set, get) => {
     codePanelOpen: false,
     importOpen: false,
     saveDialogTabId: null,
+    oauthPendingUrl: null,
 
     async init() {
       // React StrictMode runs effects twice in dev; only the first call loads/seeds data.
@@ -627,6 +641,47 @@ export const useWorkspace = create<Store>()((set, get) => {
       };
       set((s) => ({ history: [entry, ...s.history].slice(0, 300) }));
       void db().history.put(entry).catch(() => {});
+    },
+    async fetchOAuthToken(auth, collectionId, mode) {
+      // Open the popup synchronously, before any await, so popup blockers allow it.
+      const needsPopup = mode === "new" && auth.grantType === "authorization_code";
+      const popup = needsPopup ? window.open("about:blank", "packetman-oauth", OAUTH_POPUP_FEATURES) : null;
+      try {
+        const collection = collectionId ? get().collections.find((c) => c.id === collectionId) : undefined;
+        const { scopes } = scopesFor(collection);
+        const r = (s: string) => resolveString(s, scopes);
+        let grant: TokenGrant;
+        if (mode === "refresh") {
+          if (!auth.refreshToken) throw new Error("Tidak ada refresh token.");
+          grant = { grant: "refresh_token", refreshToken: auth.refreshToken };
+        } else if (auth.grantType === "client_credentials") {
+          grant = { grant: "client_credentials" };
+        } else {
+          const redirectUri = oauthRedirectUri();
+          const state = randomString(32);
+          const pkce = auth.usePkce ? await generatePkce() : undefined;
+          const url = buildAuthorizeUrl(auth, { state, redirectUri, codeChallenge: pkce?.challenge }, r);
+          // Popup blocked: show the login link so the user can open it in a tab; the callback reports back over BroadcastChannel.
+          if (!popup) set({ oauthPendingUrl: url });
+          const code = await waitForAuthorizationCode(popup, url, state).finally(() => set({ oauthPendingUrl: null }));
+          grant = { grant: "authorization_code", code, redirectUri, codeVerifier: pkce?.verifier };
+        }
+        const tokenReq = buildTokenRequest(auth, grant, r);
+        const res = await dispatch(tokenReq, { followRedirects: true, timeoutMs: 30_000 });
+        const token = parseTokenResponse(res.status, res.body);
+        pushConsole([{ level: "info", text: `OAuth 2.0: token ${mode === "refresh" ? "diperbarui" : "diperoleh"} dari ${safeHost(tokenReq.url)} via ${res.executor}. Token disimpan hanya di browser ini.` }]);
+        return {
+          ...auth,
+          accessToken: token.accessToken,
+          tokenType: token.tokenType,
+          refreshToken: token.refreshToken ?? (mode === "refresh" ? auth.refreshToken : undefined),
+          expiresAt: token.expiresAt,
+        };
+      } catch (e) {
+        if (popup && !popup.closed) popup.close();
+        pushConsole([{ level: "error", text: `OAuth 2.0 gagal: ${e instanceof Error ? e.message : String(e)}` }]);
+        throw e;
+      }
     },
     openRunnerTab(collectionId, folderId) {
       const existing = get().tabs.find((t) => t.kind === "runner" && t.collectionId === collectionId && t.folderId === folderId);

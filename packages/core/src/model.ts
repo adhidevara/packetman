@@ -58,9 +58,48 @@ export type Auth =
   | { type: "none" }
   | { type: "apikey"; key: string; value: string; in: "header" | "query" }
   | { type: "bearer"; token: string }
-  | { type: "basic"; username: string; password: string };
+  | { type: "basic"; username: string; password: string }
+  | OAuth2Auth;
+
+export type OAuth2GrantType = "authorization_code" | "client_credentials";
+
+export interface OAuth2Auth {
+  type: "oauth2";
+  grantType: OAuth2GrantType;
+  authUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  clientSecret: string;
+  scope: string;
+  usePkce: boolean;
+  /** How the client authenticates at the token endpoint. */
+  clientAuth: "basic" | "body";
+  /** Prefix for the Authorization header, usually "Bearer". */
+  headerPrefix: string;
+  /** Token state. Local only: never exported. */
+  accessToken: string;
+  tokenType?: string;
+  refreshToken?: string;
+  expiresAt?: number;
+}
 
 export type AuthType = Auth["type"];
+
+export function defaultOAuth2(): OAuth2Auth {
+  return {
+    type: "oauth2",
+    grantType: "authorization_code",
+    authUrl: "",
+    tokenUrl: "",
+    clientId: "",
+    clientSecret: "",
+    scope: "",
+    usePkce: true,
+    clientAuth: "body",
+    headerPrefix: "Bearer",
+    accessToken: "",
+  };
+}
 
 export interface Scripts {
   preRequest: string;
