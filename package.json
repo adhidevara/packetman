@@ -2,6 +2,7 @@
   "name": "packetman",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Privacy-first, web-based API client.",
   "scripts": {
     "dev": "cross-env TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 turbo run dev --filter=web",

@@ -23,3 +23,4 @@ Rilis pertama Packetman: API client berbasis web yang mengutamakan privasi.
 - **Packetman Interceptor** (Chrome MV3) untuk mengirim request tanpa batas CORS dan tanpa server.
 - **Self-host**: Dockerfile (Next.js standalone, user non-root, healthcheck `/api/health`) dan `docker-compose.yml`.
 - **Keamanan**: Content Security Policy, header keamanan, telemetri Next.js/Turborepo dimatikan.
+- **Lisensi**: Apache License 2.0.

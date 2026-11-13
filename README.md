@@ -105,6 +105,10 @@ Extension hanya menerima pesan dari origin yang terdaftar di [`apps/extension/ma
 2. Perbarui versi di `package.json`, `apps/web/src/lib/version.ts`, `apps/extension/manifest.json`, dan `CHANGELOG.md`.
 3. Buat dan push tag `vX.Y.Z`. Workflow [release.yml](.github/workflows/release.yml) membangun image ke GHCR dan melampirkan zip extension di GitHub Release.
 
+## Lisensi
+
+Packetman dirilis di bawah [Apache License 2.0](LICENSE). Packetman adalah proyek independen dan tidak berafiliasi dengan Postman, Inc.
+
 ## Belum ada (lihat roadmap di spesifikasi)
 
 GraphQL/WebSocket/gRPC, upload file, Digest/AWS v4/OAuth1, Desktop Agent, sync tim E2E, mock server, monitor, CLI, Packetbot (AI), `pm.sendRequest`, `require()` library di sandbox.
