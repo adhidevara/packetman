@@ -96,6 +96,11 @@ export function buildRequest(request: RequestData, opts: BuildOptions): Resolved
       }
       break;
     }
+    case "oauth2": {
+      const token = r(auth.accessToken);
+      if (token && !hasHeader(headers, "authorization")) headers.push(["Authorization", `${auth.headerPrefix || "Bearer"} ${token}`.trim()]);
+      break;
+    }
     case "none":
     case "inherit":
       break;

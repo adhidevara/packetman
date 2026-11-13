@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { countRequests, exportPostmanCollection, exportPostmanEnvironment, type Collection, type TreeNode } from "@packetman/core";
-import { ChevronDown, ChevronRight, Copy, Download, FileDown, FolderPlus, Globe, History, Layers, MoreHorizontal, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Download, FileDown, FolderPlus, Globe, History, Layers, MoreHorizontal, Pencil, Play, Plus, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { GLOBALS_ID, useWorkspace, type SidebarView } from "@/store/workspace";
 import { cx, IconButton, MethodLabel, statusTone } from "./ui";
@@ -189,6 +189,7 @@ function CollectionItem({ collection, renaming, setRenaming }: { collection: Col
         <span className="text-2xs text-faint group-hover:hidden">{countRequests(collection.items)}</span>
         <RowMenu
           items={[
+            { label: "Jalankan koleksi", icon: Play, onClick: () => s.openRunnerTab(collection.id) },
             { label: "Request baru", icon: Plus, onClick: () => s.addRequest(collection.id) },
             { label: "Folder baru", icon: FolderPlus, onClick: () => s.addFolder(collection.id) },
             { label: "Variabel, auth & script", icon: Settings2, onClick: () => s.openCollectionTab(collection.id) },
@@ -257,6 +258,7 @@ function TreeRow({ node, depth, collectionId, renaming, setRenaming }: { node: T
           )}
           <RowMenu
             items={[
+              { label: "Jalankan folder", icon: Play, onClick: () => s.openRunnerTab(collectionId, node.id) },
               { label: "Request baru", icon: Plus, onClick: () => s.addRequest(collectionId, node.id) },
               { label: "Folder baru", icon: FolderPlus, onClick: () => s.addFolder(collectionId, node.id) },
               { label: "Ganti nama", icon: Pencil, onClick: () => setRenaming(node.id) },

@@ -1,0 +1,17 @@
+# Self-host Packetman.
+#   docker compose up -d --build
+# Then open http://localhost:3000
+services:
+  packetman:
+    build: .
+    image: packetman:0.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      # Set to "false" to disable the cloud relay entirely (browser/extension only).
+      PACKETMAN_RELAY_ENABLED: "true"
+      # Only on a trusted internal network: let the relay reach private addresses.
+      PACKETMAN_RELAY_ALLOW_PRIVATE: "false"
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/app/api/**", "src/server/**"],
     rules: {
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true }],
       "no-restricted-globals": [
         "error",
         { name: "fetch", message: "Gunakan egressFetch() dari @/lib/egress (atau executor) agar koneksi tercatat di Egress Monitor." },

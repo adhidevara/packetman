@@ -129,7 +129,7 @@ export function RequestPane({ tab }: { tab: Extract<Tab, { kind: "request" }> })
             <KeyValueEditor rows={d.params} onChange={(params) => patch({ params, url: urlWithParams(d.url, params) })} keyPlaceholder="Param" />
           </div>
         )}
-        {sub === "auth" && <AuthEditor auth={d.auth} onChange={(auth) => patch({ auth })} inheritedFrom={inheritedFrom} />}
+        {sub === "auth" && <AuthEditor auth={d.auth} onChange={(auth) => patch({ auth })} inheritedFrom={inheritedFrom} collectionId={tab.collectionId} />}
         {sub === "headers" && (
           <div className="p-4">
             <KeyValueEditor rows={d.headers} onChange={(headers) => patch({ headers })} keyPlaceholder="Header" />

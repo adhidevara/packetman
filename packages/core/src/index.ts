@@ -7,5 +7,7 @@ export * from "./encoding";
 export * from "./build";
 export * from "./codegen";
 export * from "./secrets";
+export * from "./datafile";
+export * from "./oauth";
 export * from "./importers/postman";
 export * from "./importers/curl";

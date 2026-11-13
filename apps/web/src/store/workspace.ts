@@ -1,7 +1,15 @@
 "use client";
 
 import {
+  buildAuthorizeUrl,
+  buildTokenRequest,
   findNode,
+  generatePkce,
+  parseTokenResponse,
+  randomString,
+  resolveString,
+  type OAuth2Auth,
+  type TokenGrant,
   findRequest,
   importCurl,
   importPostmanCollection,
@@ -22,6 +30,7 @@ import {
   updateNode,
   variablesToMap,
   type Collection,
+  type DataRow,
   type Environment,
   type RequestData,
   type RequestNode,
@@ -34,10 +43,11 @@ import {
   type Variable,
   type VariableScopes,
 } from "@packetman/core";
-import { executeRequest, type ExecutionResult } from "@packetman/runtime";
+import { executeRequest, runCollection, type ExecutionResult, type RunnerItemResult, type RunnerSummary } from "@packetman/runtime";
 import { create } from "zustand";
 import { db, getSetting, setSetting, type HistoryEntry } from "@/lib/db";
 import { CorsOrNetworkError, detectExtension, safeHost, sendDirect, sendViaExtension, sendViaRelay, type ExecutorMode } from "@/lib/executors";
+import { OAUTH_POPUP_FEATURES, oauthRedirectUri, waitForAuthorizationCode } from "@/lib/oauthPopup";
 import { loadQuickJS } from "@/lib/quickjs";
 import { demoCollection, demoEnvironment } from "@/lib/seed";
 
@@ -46,7 +56,27 @@ import { demoCollection, demoEnvironment } from "@/lib/seed";
 export type Tab =
   | { id: string; kind: "request"; collectionId: string | null; requestId: string | null; draft: RequestNode; dirty: boolean }
   | { id: string; kind: "environment"; envId: string }
-  | { id: string; kind: "collection"; collectionId: string };
+  | { id: string; kind: "collection"; collectionId: string }
+  | { id: string; kind: "runner"; collectionId: string; folderId?: string };
+
+export interface RunnerConfig {
+  requestIds: string[];
+  iterations: number;
+  delayMs: number;
+  data?: DataRow[];
+  stopOnError: boolean;
+  /** Save environment/collection/global changes made by scripts after the run. */
+  persistVariables: boolean;
+}
+
+export interface RunnerState {
+  running: boolean;
+  total: number;
+  items: RunnerItemResult[];
+  summary?: RunnerSummary;
+  controller?: AbortController;
+  error?: string;
+}
 
 export interface RunState {
   loading: boolean;
@@ -88,6 +118,7 @@ interface State {
   activeTabId: string | null;
   activeEnvId: string | null;
   runs: Record<string, RunState>;
+  runners: Record<string, RunnerState>;
   consoleEntries: ConsoleEntry[];
   executorMode: ExecutorMode;
   extensionVersion: string | null;
@@ -99,6 +130,8 @@ interface State {
   codePanelOpen: boolean;
   importOpen: boolean;
   saveDialogTabId: string | null;
+  /** Authorize URL to open manually when the browser blocked the OAuth popup. */
+  oauthPendingUrl: string | null;
 }
 
 interface Actions {
@@ -137,6 +170,11 @@ interface Actions {
   setActiveEnv(id: string | null): void;
 
   send(tabId: string): Promise<void>;
+  /** Obtain (or refresh) an OAuth 2.0 token. Must be called from a click handler (opens a popup). */
+  fetchOAuthToken(auth: OAuth2Auth, collectionId: string | null, mode: "new" | "refresh"): Promise<OAuth2Auth>;
+  openRunnerTab(collectionId: string, folderId?: string): void;
+  startRunner(tabId: string, config: RunnerConfig): Promise<void>;
+  stopRunner(tabId: string): void;
   clearConsole(): void;
   clearHistory(): void;
   openHistory(entry: HistoryEntry): void;
@@ -228,6 +266,44 @@ export const useWorkspace = create<Store>()((set, get) => {
     }
   }
 
+  /** Scopes visible to requests in a collection, from the current store state. */
+  function scopesFor(collection?: Collection): { scopes: VariableScopes; env?: Environment } {
+    const state = get();
+    const env = state.environments.find((e) => e.id === state.activeEnvId);
+    return {
+      env,
+      scopes: {
+        local: {},
+        data: {},
+        environment: variablesToMap(env?.values),
+        collection: variablesToMap(collection?.variables),
+        global: variablesToMap(state.globals.values),
+      },
+    };
+  }
+
+  /** Persist script-made variable changes (current values, local only). */
+  function persistScopes(before: VariableScopes, after: VariableScopes, env: Environment | undefined, collection: Collection | undefined) {
+    const changed = (a: ScopeValues, b: ScopeValues) => JSON.stringify(a) !== JSON.stringify(b);
+    if (env && changed(before.environment, after.environment)) {
+      const fresh = get().environments.find((e) => e.id === env.id) ?? env;
+      get().updateEnvironment({ ...fresh, values: applyScopeChanges(fresh.values, before.environment, after.environment) });
+    }
+    if (collection && changed(before.collection, after.collection)) {
+      get().updateCollection(collection.id, (c) => ({ ...c, variables: applyScopeChanges(c.variables, before.collection, after.collection) }));
+    }
+    if (changed(before.global, after.global)) {
+      const g = get().globals;
+      get().updateEnvironment({ ...g, values: applyScopeChanges(g.values, before.global, after.global) });
+    }
+  }
+
+  const setRunner = (tabId: string, patch: Partial<RunnerState> | ((r: RunnerState) => Partial<RunnerState>)) =>
+    set((s) => {
+      const cur = s.runners[tabId] ?? { running: false, total: 0, items: [] };
+      return { runners: { ...s.runners, [tabId]: { ...cur, ...(typeof patch === "function" ? patch(cur) : patch) } } };
+    });
+
   return {
     ready: false,
     collections: [],
@@ -238,6 +314,7 @@ export const useWorkspace = create<Store>()((set, get) => {
     activeTabId: null,
     activeEnvId: null,
     runs: {},
+    runners: {},
     consoleEntries: [],
     executorMode: "auto",
     extensionVersion: null,
@@ -249,6 +326,7 @@ export const useWorkspace = create<Store>()((set, get) => {
     codePanelOpen: false,
     importOpen: false,
     saveDialogTabId: null,
+    oauthPendingUrl: null,
 
     async init() {
       // React StrictMode runs effects twice in dev; only the first call loads/seeds data.
@@ -379,13 +457,16 @@ export const useWorkspace = create<Store>()((set, get) => {
       set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
     },
     closeTab(id) {
+      get().runners[id]?.controller?.abort();
       set((s) => {
         const idx = s.tabs.findIndex((t) => t.id === id);
         const tabs = s.tabs.filter((t) => t.id !== id);
         const runs = { ...s.runs };
         delete runs[id];
+        const runners = { ...s.runners };
+        delete runners[id];
         const activeTabId = s.activeTabId === id ? (tabs[Math.min(idx, tabs.length - 1)]?.id ?? null) : s.activeTabId;
-        return { tabs, runs, activeTabId };
+        return { tabs, runs, runners, activeTabId };
       });
       persistTabs(get());
     },
@@ -513,14 +594,7 @@ export const useWorkspace = create<Store>()((set, get) => {
       if (!tab || tab.kind !== "request") return;
       const collection = tab.collectionId ? state.collections.find((c) => c.id === tab.collectionId) : undefined;
       const ancestors = collection && tab.requestId ? (findNode(collection, tab.requestId)?.ancestors ?? []) : [];
-      const env = state.environments.find((e) => e.id === state.activeEnvId);
-      const scopes: VariableScopes = {
-        local: {},
-        data: {},
-        environment: variablesToMap(env?.values),
-        collection: variablesToMap(collection?.variables),
-        global: variablesToMap(state.globals.values),
-      };
+      const { scopes, env } = scopesFor(collection);
 
       set((s) => ({ runs: { ...s.runs, [tabId]: { loading: true, startedAt: Date.now() } } }));
 
@@ -541,23 +615,7 @@ export const useWorkspace = create<Store>()((set, get) => {
         result = { tests: [], logs: [], scripts: [], scopes, visualizer: null, error: e instanceof Error ? e.message : String(e) };
       }
 
-      // Persist variable changes made by scripts (current values, local only).
-      const after = result.scopes;
-      if (env) {
-        const values = applyScopeChanges(env.values, scopes.environment, after.environment);
-        if (values !== env.values) get().updateEnvironment({ ...env, values });
-      }
-      if (collection) {
-        const before = scopes.collection;
-        if (JSON.stringify(before) !== JSON.stringify(after.collection)) {
-          get().updateCollection(collection.id, (c) => ({ ...c, variables: applyScopeChanges(c.variables, before, after.collection) }));
-        }
-      }
-      if (JSON.stringify(scopes.global) !== JSON.stringify(after.global)) {
-        const g = get().globals;
-        get().updateEnvironment({ ...g, values: applyScopeChanges(g.values, scopes.global, after.global) });
-      }
-
+      persistScopes(scopes, result.scopes, env, collection);
       set((s) => ({ runs: { ...s.runs, [tabId]: { loading: false, result } } }));
 
       const res = result.response;
@@ -583,6 +641,97 @@ export const useWorkspace = create<Store>()((set, get) => {
       };
       set((s) => ({ history: [entry, ...s.history].slice(0, 300) }));
       void db().history.put(entry).catch(() => {});
+    },
+    async fetchOAuthToken(auth, collectionId, mode) {
+      // Open the popup synchronously, before any await, so popup blockers allow it.
+      const needsPopup = mode === "new" && auth.grantType === "authorization_code";
+      const popup = needsPopup ? window.open("about:blank", "packetman-oauth", OAUTH_POPUP_FEATURES) : null;
+      try {
+        const collection = collectionId ? get().collections.find((c) => c.id === collectionId) : undefined;
+        const { scopes } = scopesFor(collection);
+        const r = (s: string) => resolveString(s, scopes);
+        let grant: TokenGrant;
+        if (mode === "refresh") {
+          if (!auth.refreshToken) throw new Error("Tidak ada refresh token.");
+          grant = { grant: "refresh_token", refreshToken: auth.refreshToken };
+        } else if (auth.grantType === "client_credentials") {
+          grant = { grant: "client_credentials" };
+        } else {
+          const redirectUri = oauthRedirectUri();
+          const state = randomString(32);
+          const pkce = auth.usePkce ? await generatePkce() : undefined;
+          const url = buildAuthorizeUrl(auth, { state, redirectUri, codeChallenge: pkce?.challenge }, r);
+          // Popup blocked: show the login link so the user can open it in a tab; the callback reports back over BroadcastChannel.
+          if (!popup) set({ oauthPendingUrl: url });
+          const code = await waitForAuthorizationCode(popup, url, state).finally(() => set({ oauthPendingUrl: null }));
+          grant = { grant: "authorization_code", code, redirectUri, codeVerifier: pkce?.verifier };
+        }
+        const tokenReq = buildTokenRequest(auth, grant, r);
+        const res = await dispatch(tokenReq, { followRedirects: true, timeoutMs: 30_000 });
+        const token = parseTokenResponse(res.status, res.body);
+        pushConsole([{ level: "info", text: `OAuth 2.0: token ${mode === "refresh" ? "diperbarui" : "diperoleh"} dari ${safeHost(tokenReq.url)} via ${res.executor}. Token disimpan hanya di browser ini.` }]);
+        return {
+          ...auth,
+          accessToken: token.accessToken,
+          tokenType: token.tokenType,
+          refreshToken: token.refreshToken ?? (mode === "refresh" ? auth.refreshToken : undefined),
+          expiresAt: token.expiresAt,
+        };
+      } catch (e) {
+        if (popup && !popup.closed) popup.close();
+        pushConsole([{ level: "error", text: `OAuth 2.0 gagal: ${e instanceof Error ? e.message : String(e)}` }]);
+        throw e;
+      }
+    },
+    openRunnerTab(collectionId, folderId) {
+      const existing = get().tabs.find((t) => t.kind === "runner" && t.collectionId === collectionId && t.folderId === folderId);
+      if (existing) return set({ activeTabId: existing.id });
+      const tab: Tab = { id: newId(), kind: "runner", collectionId, folderId };
+      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+    },
+    async startRunner(tabId, config) {
+      const tab = get().tabs.find((t) => t.id === tabId);
+      if (!tab || tab.kind !== "runner" || get().runners[tabId]?.running) return;
+      const collection = get().collections.find((c) => c.id === tab.collectionId);
+      if (!collection) return;
+      const { scopes, env } = scopesFor(collection);
+      const controller = new AbortController();
+      setRunner(tabId, { running: true, total: config.requestIds.length * config.iterations, items: [], summary: undefined, controller, error: undefined });
+      try {
+        const quickjs = await loadQuickJS();
+        const summary = await runCollection({
+          quickjs,
+          collection,
+          folderId: tab.folderId,
+          requestIds: config.requestIds,
+          iterations: config.iterations,
+          delayMs: config.delayMs,
+          data: config.data,
+          stopOnError: config.stopOnError,
+          scopes,
+          environmentName: env?.name,
+          timeoutMs: 10_000,
+          signal: controller.signal,
+          send: (resolved, req) => dispatch(resolved, req.settings),
+          onEvent: (e) => {
+            if (e.type === "item") setRunner(tabId, (r) => ({ items: [...r.items, e.item] }));
+          },
+        });
+        if (config.persistVariables) persistScopes(scopes, summary.scopes, env, collection);
+        setRunner(tabId, { running: false, summary, controller: undefined });
+        const t = summary.totals;
+        pushConsole([
+          {
+            level: t.testsFailed || t.errors ? "warn" : "request",
+            text: `Runner "${collection.name}": ${t.requests} request, ${t.testsPassed} test lulus, ${t.testsFailed} gagal, ${t.errors} error, ${summary.durationMs} ms`,
+          },
+        ]);
+      } catch (e) {
+        setRunner(tabId, { running: false, controller: undefined, error: e instanceof Error ? e.message : String(e) });
+      }
+    },
+    stopRunner(tabId) {
+      get().runners[tabId]?.controller?.abort();
     },
     clearConsole: () => set({ consoleEntries: [] }),
     clearHistory() {

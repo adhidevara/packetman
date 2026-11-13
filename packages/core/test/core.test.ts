@@ -121,7 +121,7 @@ describe("postman import/export", () => {
           },
         ],
       },
-      { name: "Legacy", request: { method: "GET", url: "{{base}}/legacy", auth: { type: "oauth2", oauth2: [] } } },
+      { name: "Legacy", request: { method: "GET", url: "{{base}}/legacy", auth: { type: "hawk", hawk: [] } } },
     ],
   };
 
@@ -140,7 +140,7 @@ describe("postman import/export", () => {
       expect(req.body).toEqual({ mode: "raw", language: "json", raw: '{"a":1}' });
       expect(req.params.map((p) => p.key)).toEqual(["x"]);
     }
-    expect(warnings.some((w) => w.includes("oauth2"))).toBe(true);
+    expect(warnings.some((w) => w.includes("hawk"))).toBe(true);
   });
 
   it("round-trips through v2.1 export without leaking secret values", () => {

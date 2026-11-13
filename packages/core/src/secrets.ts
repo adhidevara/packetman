@@ -85,6 +85,8 @@ function scanNodes(items: TreeNode[], path: string, out: SecretFinding[]) {
     }
     if (n.auth.type === "basic" && n.auth.password && !n.auth.password.includes("{{"))
       out.push({ location: loc, field: "Auth: Basic password", pattern: "Password ditulis langsung (bukan variabel)", preview: maskSecret(n.auth.password) });
+    if (n.auth.type === "oauth2" && n.auth.clientSecret && !n.auth.clientSecret.includes("{{"))
+      out.push({ location: loc, field: "Auth: OAuth2 client secret", pattern: "Client secret ditulis langsung (bukan variabel)", preview: maskSecret(n.auth.clientSecret) });
     if (n.auth.type === "apikey") {
       const hit = detectSecret(n.auth.value);
       if (hit) out.push({ location: loc, field: `Auth: API key ${n.auth.key}`, pattern: hit.label, preview: maskSecret(n.auth.value) });
