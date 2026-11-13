@@ -1,5 +1,6 @@
 {
   "name": "packetman",
+  "version": "0.1.0",
   "private": true,
   "description": "Privacy-first, web-based API client.",
   "scripts": {

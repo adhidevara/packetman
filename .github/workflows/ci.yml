@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, "release/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  TURBO_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Lint also enforces the egress rule: no direct fetch/WebSocket/sendBeacon outside src/lib/egress.ts.
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter web build
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifest
+        run: node -e "const m=require('./apps/extension/manifest.json'); if(m.manifest_version!==3) throw new Error('MV3 required'); console.log(m.name, m.version)"
+      - name: Package extension
+        run: cd apps/extension && zip -r ../../packetman-interceptor.zip manifest.json background.js content.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packetman-interceptor
+          path: packetman-interceptor.zip
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: packetman:ci

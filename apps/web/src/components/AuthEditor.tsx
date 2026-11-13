@@ -121,10 +121,10 @@ function OAuth2Form({ auth, onChange, collectionId }: { auth: OAuth2Auth; onChan
   const [busy, setBusy] = useState<"new" | "refresh" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [redirectUri, setRedirectUri] = useState("");
+  // The workbench renders client-side only (after IndexedDB loads), so window is available here.
+  const redirectUri = typeof window === "undefined" ? "" : `${window.location.origin}/oauth/callback`;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    setRedirectUri(`${window.location.origin}/oauth/callback`);
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);

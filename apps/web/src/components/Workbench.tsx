@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { BACKGROUND_CATEGORIES } from "@/lib/egress";
 import type { ExecutorMode } from "@/lib/executors";
+import { PACKETMAN_VERSION } from "@/lib/version";
 import { GLOBALS_ID, useWorkspace, type Tab } from "@/store/workspace";
 import { ConsolePanel, EgressMonitor, useEgress } from "./BottomPanels";
 import { CodePanel } from "./CodePanel";
@@ -304,6 +305,9 @@ function StatusBar() {
       >
         <Terminal size={13} /> Console
       </button>
+      <a href="/privacy" target="_blank" rel="noopener" className="rounded-[4px] px-1.5 py-0.5 hover:bg-hover hover:text-text" title="Privasi">
+        Privasi · v{PACKETMAN_VERSION}
+      </a>
     </footer>
   );
 }
