@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, FileDown, Globe, Layers, Moon, Plus, Sun, Terminal, X } from "lucide-react";
+import { Bot, FileDown, Globe, Layers, Moon, Play, Plus, Sun, Terminal, X } from "lucide-react";
 import { useEffect } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { BACKGROUND_CATEGORIES } from "@/lib/egress";
@@ -11,6 +11,7 @@ import { CodePanel } from "./CodePanel";
 import { ImportDialog, RelayConsentDialog, SaveDialog } from "./Dialogs";
 import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
+import { RunnerTab } from "./RunnerTab";
 import { CollectionTab, EnvironmentTab } from "./SettingsTabs";
 import { Sidebar } from "./Sidebar";
 import { Button, cx, EmptyState, IconButton, MethodLabel, Select } from "./ui";
@@ -126,6 +127,7 @@ function TopBar() {
 function tabLabel(tab: Tab, envName: (id: string) => string, colName: (id: string) => string) {
   if (tab.kind === "request") return tab.draft.name || "Untitled";
   if (tab.kind === "environment") return tab.envId === GLOBALS_ID ? "Globals" : envName(tab.envId);
+  if (tab.kind === "runner") return `Runner · ${colName(tab.collectionId)}`;
   return colName(tab.collectionId);
 }
 
@@ -158,6 +160,8 @@ function TabBar() {
             <MethodLabel method={t.draft.method} className="w-auto" />
           ) : t.kind === "environment" ? (
             <Globe size={13} className="shrink-0 text-faint" />
+          ) : t.kind === "runner" ? (
+            <Play size={13} className="shrink-0 text-faint" />
           ) : (
             <Layers size={13} className="shrink-0 text-faint" />
           )}
@@ -205,6 +209,8 @@ function MainArea() {
     content = <EnvironmentTab envId={tab.envId} />;
   } else if (tab.kind === "collection") {
     content = <CollectionTab collectionId={tab.collectionId} />;
+  } else if (tab.kind === "runner") {
+    content = <RunnerTab key={tab.id} tabId={tab.id} collectionId={tab.collectionId} folderId={tab.folderId} />;
   } else {
     content = (
       <Group orientation="horizontal" className="h-full">
