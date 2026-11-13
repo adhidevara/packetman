@@ -2,7 +2,7 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/), versi mengikuti [SemVer](https://semver.org/lang/id/).
 
-## [0.1.0] - 2026-11-13
+## [0.1.0] - 2026-11-14
 
 Rilis pertama Packetman: API client berbasis web yang mengutamakan privasi.
 
