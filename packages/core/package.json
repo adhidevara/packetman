@@ -1,0 +1,14 @@
+{
+  "name": "@packetman/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Collection model, variable resolver, request builder, importers, codegen and secret scanner (isomorphic).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

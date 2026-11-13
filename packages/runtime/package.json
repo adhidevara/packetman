@@ -1,0 +1,20 @@
+{
+  "name": "@packetman/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Script sandbox (QuickJS) with a Postman-compatible pm API, plus the request execution pipeline.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@jitl/quickjs-singlefile-browser-release-sync": "^0.32.0",
+    "@jitl/quickjs-singlefile-mjs-release-sync": "^0.32.0",
+    "@packetman/core": "workspace:*",
+    "quickjs-emscripten-core": "^0.32.0"
+  }
+}

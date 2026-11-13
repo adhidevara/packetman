@@ -1,0 +1,22 @@
+{
+  "name": "packetman",
+  "private": true,
+  "description": "Privacy-first, web-based API client.",
+  "scripts": {
+    "dev": "cross-env TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 turbo run dev --filter=web",
+    "build": "cross-env TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 turbo run build",
+    "test": "cross-env TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 turbo run test",
+    "typecheck": "cross-env TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 turbo run typecheck",
+    "lint": "cross-env TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 turbo run lint"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "turbo": "^2.11.11",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  },
+  "packageManager": "pnpm@11.1.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

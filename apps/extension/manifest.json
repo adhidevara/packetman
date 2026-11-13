@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Packetman Interceptor",
+  "version": "0.1.0",
+  "description": "Lets the Packetman web app send API requests from your own browser, without CORS limits and without any cloud relay.",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:3000/*", "http://127.0.0.1:3000/*", "https://app.packetman.dev/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "host_permissions": ["<all_urls>"],
+  "permissions": []
+}
