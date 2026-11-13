@@ -1,4 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Isomorphic package: no ambient @types (e.g. Node's Buffer) may leak in.
+    "types": []
+  },
   "include": ["src", "test"]
 }

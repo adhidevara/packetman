@@ -94,7 +94,9 @@ describe("buildRequest", () => {
   it("encodes basic auth as UTF-8 and supports api key in query", () => {
     const basic = buildRequest(newRequest({ url: "localhost:3000", auth: { type: "basic", username: "andré", password: "p" } }), { scopes: emptyScopes() });
     expect(basic.url).toBe("http://localhost:3000");
-    expect(basic.headers).toContainEqual(["Authorization", "Basic " + Buffer.from("andré:p", "utf8").toString("base64")]);
+    // Web-standard UTF-8 → base64 (core stays isomorphic: no Node Buffer types in tests either).
+    const expected = btoa(String.fromCharCode(...new TextEncoder().encode("andré:p")));
+    expect(basic.headers).toContainEqual(["Authorization", `Basic ${expected}`]);
     const q = buildRequest(newRequest({ url: "https://x.dev/a?b=1", auth: { type: "apikey", key: "api_key", value: "k 1", in: "query" } }), { scopes: emptyScopes() });
     expect(q.url).toBe("https://x.dev/a?b=1&api_key=k%201");
   });
